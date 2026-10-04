@@ -51,6 +51,65 @@ func TestRenderMessageKeepsAttachmentNamesOnly(t *testing.T) {
 	}
 }
 
+func TestReturnPathOverrideFailedFile(t *testing.T) {
+	raw := []byte(strings.Join([]string{
+		"Return-Path:",
+		" <bounce@diamondway.com.au>",
+		"From: \"Administrator\" <notifications@diamondway.com.au>",
+		"To: syahrial@portcities.net",
+		"Subject: Test",
+		"",
+		"hello",
+		"",
+	}, "\r\n"))
+	sets, err := parseHeaderSet("Return-Path: bounce@daisysgarden.com.au\nReply-To: admin@daisysgarden.com.au\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rewritten := applyHeaderSet(raw, sets)
+	from := envelopeFrom("bounce@diamondway.com.au", sets)
+	if from != "bounce@daisysgarden.com.au" {
+		t.Fatalf("envelope = %s", from)
+	}
+	if got := envelopeFrom("old@example.com", []headerSet{{Name: "Return-Path", Value: "<bounce@daisysgarden.com.au>"}}); got != "bounce@daisysgarden.com.au" {
+		t.Fatalf("angle address = %s", got)
+	}
+	got := string(renderFailed(failedMail{
+		When:   time.Date(2026, 10, 4, 15, 49, 21, 0, time.UTC),
+		Client: "10.10.207.74:36502",
+		Helo:   "[10.10.207.74]",
+		From:   from,
+		Rcpts:  []string{"syahrial@portcities.net"},
+		Err: &smtp.SMTPError{
+			Code:         550,
+			EnhancedCode: smtp.EnhancedCode{5, 7, 1},
+			Message:      "Invalid login",
+		},
+		Raw: rewritten,
+	}))
+	if strings.Contains(got, "bounce@diamondway.com.au") {
+		t.Fatalf("original address kept:\n%s", got)
+	}
+	if !strings.Contains(got, "mail-from = bounce@daisysgarden.com.au\n") {
+		t.Fatalf("missing envelope note:\n%s", got)
+	}
+	if !strings.Contains(got, "Return-Path: bounce@daisysgarden.com.au\n") {
+		t.Fatalf("missing overridden header:\n%s", got)
+	}
+	if !strings.Contains(got, "Reply-To: admin@daisysgarden.com.au\n") {
+		t.Fatalf("missing inserted header:\n%s", got)
+	}
+	if strings.Contains(got, "Mail-From:") {
+		t.Fatalf("preamble still looks like a header:\n%s", got)
+	}
+}
+
+func TestParseHeaderSetRejectsBadLine(t *testing.T) {
+	if _, err := parseHeaderSet("Return Path: bounce@daisysgarden.com.au"); err == nil {
+		t.Fatal("expected a bad line to fail")
+	}
+}
+
 func TestSMTPFailureAppendsFilename(t *testing.T) {
 	err := smtpFailure(&smtp.SMTPError{
 		Code:         550,

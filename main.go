@@ -26,6 +26,7 @@ type config struct {
 	FailedDir   string
 	Domain      string
 	MaxBytes    int64
+	Headers     []headerSet
 }
 
 func main() {
@@ -85,6 +86,10 @@ func loadConfig() (config, error) {
 	if maxBytes <= 0 {
 		return config{}, errors.New("SMTP_DEBUG_MAX_BYTES must be greater than 0")
 	}
+	headers, err := parseHeaderSet(os.Getenv("SMTP_DEBUG_HEADER_SET"))
+	if err != nil {
+		return config{}, err
+	}
 
 	return config{
 		Listen:      env("SMTP_DEBUG_LISTEN", "127.0.0.1:2525"),
@@ -98,6 +103,7 @@ func loadConfig() (config, error) {
 		FailedDir:   env("SMTP_DEBUG_FAILED_DIR", "/failed"),
 		Domain:      env("SMTP_DEBUG_DOMAIN", "localhost"),
 		MaxBytes:    maxBytes,
+		Headers:     headers,
 	}, nil
 }
 
@@ -178,7 +184,9 @@ func (s *session) Data(r io.Reader) error {
 		_ = s.conn.SetDeadline(time.Time{})
 	}
 
-	err = relay(s.cfg, s.from, s.rcpts, raw)
+	raw = applyHeaderSet(raw, s.cfg.Headers)
+	from := envelopeFrom(s.from, s.cfg.Headers)
+	err = relay(s.cfg, from, s.rcpts, raw)
 	if err == nil {
 		return nil
 	}
@@ -187,7 +195,7 @@ func (s *session) Data(r io.Reader) error {
 		When:   time.Now(),
 		Client: s.client,
 		Helo:   s.helo,
-		From:   s.from,
+		From:   from,
 		Rcpts:  s.rcpts,
 		Err:    err,
 		Raw:    raw,

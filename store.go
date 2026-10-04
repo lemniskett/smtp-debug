@@ -66,14 +66,14 @@ func failedName(t time.Time) string {
 
 func renderFailed(msg failedMail) []byte {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Received-At: %s\n", msg.When.UTC().Format(time.RFC3339))
-	fmt.Fprintf(&b, "Client: %s\n", msg.Client)
-	fmt.Fprintf(&b, "Helo: %s\n", msg.Helo)
-	fmt.Fprintf(&b, "Mail-From: %s\n", msg.From)
+	fmt.Fprintf(&b, "received-at = %s\n", msg.When.UTC().Format(time.RFC3339))
+	fmt.Fprintf(&b, "client = %s\n", msg.Client)
+	fmt.Fprintf(&b, "helo = %s\n", msg.Helo)
+	fmt.Fprintf(&b, "mail-from = %s\n", msg.From)
 	for _, rcpt := range msg.Rcpts {
-		fmt.Fprintf(&b, "Rcpt-To: %s\n", rcpt)
+		fmt.Fprintf(&b, "rcpt-to = %s\n", rcpt)
 	}
-	fmt.Fprintf(&b, "Upstream-Error: %s\n", upstreamError(msg.Err))
+	fmt.Fprintf(&b, "upstream-error = %s\n", upstreamError(msg.Err))
 	b.WriteString("---\n")
 	b.WriteString(renderMessage(msg.Raw))
 	return []byte(b.String())
